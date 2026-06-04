@@ -31,11 +31,11 @@ function Register() {
         />
 
         <button
-          onClick={() => navigate("/login")}
-          className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-semibold py-3 rounded-xl"
-        >
-          Register
-        </button>
+        onClick={() => navigate("/login")}
+        className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-semibold py-3 rounded-xl"
+      >
+        Register
+      </button>
 
         <p className="text-center text-gray-400 mt-6">
           Already have an account?{" "}
