@@ -1,4 +1,5 @@
-import { useState, useEffect} from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
@@ -7,6 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 
 function App() {
+  const navigate = useNavigate();
   const [threatText, setThreatText] = useState("");
   const [result, setResult] = useState("");
   const [riskLevel, setRiskLevel] = useState("");
@@ -45,6 +47,11 @@ function App() {
   doc.save("SentinelX_Report.pdf");
 };
 
+const handleLogout = () => {
+  localStorage.removeItem("token");
+  navigate("/login");
+};
+
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -54,11 +61,27 @@ function App() {
           SentinelX
         </h1>
 
-        <div className="space-x-6 text-gray-300">
-          <a href="#" className="hover:text-cyan-400">Home</a>
-          <a href="#" className="hover:text-cyan-400">Features</a>
-          <a href="#" className="hover:text-cyan-400">Dashboard</a>
+        <div className="flex items-center space-x-6 text-gray-300">
+          <a href="#" className="hover:text-cyan-400">
+            Home
+          </a>
+
+          <a href="#" className="hover:text-cyan-400">
+            Features
+          </a>
+
+          <a href="#" className="hover:text-cyan-400">
+            Dashboard
+          </a>
+
+          <button
+            onClick={handleLogout}
+            className="bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded-lg"
+          >
+            Logout
+          </button>
         </div>
+
       </nav>
 
       <div className="flex flex-col items-center justify-center text-center mt-32 px-4">
@@ -186,6 +209,26 @@ function App() {
   setRiskLevel(data.riskLevel);
   setKeywords(data.keywords);
   setLoading(false);
+      const userId =
+      localStorage.getItem("userId");
+
+    await fetch(
+      "http://localhost:5000/api/scans",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          text: threatText,
+          result: data.result,
+          riskLevel: data.riskLevel,
+          keywords: data.keywords,
+        }),
+      }
+    );
   setHistory((prev) => [
   {
     text: threatText,

@@ -1,14 +1,39 @@
+require("dotenv").config();
+const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
+const authRoutes =
+  require("./routes/authRoutes");
+
+const scanRoutes =
+  require("./routes/scanRoutes");
+
 dotenv.config();
 
 const app = express();
 
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("MongoDB Connected");
+  })
+  .catch((err) => {
+    console.log(err);
+  });
+
 app.use(cors());
 app.use(express.json());
+app.use(
+  "/api/auth",
+  authRoutes
+);
+app.use(
+  "/api/scans",
+  scanRoutes
+);
 
 const genAI = new GoogleGenerativeAI(
   process.env.GEMINI_API_KEY
@@ -26,7 +51,7 @@ app.post("/analyze", async (req, res) => {
   model: "gemini-2.0-flash",
 });
 
-    const prompt = `
+const prompt = `
 You are a cybersecurity threat analyzer.
 
 Analyze the following text and provide:
@@ -85,7 +110,7 @@ Keywords: keyword1, keyword2, keyword3
 }
 });
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
