@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
+import {PieChart,Pie,Cell,Tooltip,Legend,} from "recharts";
 
 function App() {
   const navigate = useNavigate();
@@ -25,17 +26,102 @@ function App() {
   const [highThreats, setHighThreats] = useState(0);
   const [mediumThreats, setMediumThreats] = useState(0);
   const [safeScans, setSafeScans] = useState(0);
-  const [history, setHistory] = useState(() => {
-  const savedHistory = localStorage.getItem("sentinelx-history");
-  return savedHistory ? JSON.parse(savedHistory) : [];
-});
+  const [history, setHistory] = useState([]);
+  const userName =localStorage.getItem("name");
+  const chartData = [
+  {
+    name: "High Threats",
+    value: highThreats,
+  },
+  {
+    name: "Medium Threats",
+    value: mediumThreats,
+  },
+  {
+    name: "Safe Scans",
+    value: safeScans,
+  },
+];
+const COLORS = [
+  "#ef4444",
+  "#facc15",
+  "#22c55e",
+];
   
-  useEffect(() => {
-  localStorage.setItem(
-    "sentinelx-history",
-    JSON.stringify(history)
-  );
-}, [history]);
+//   useEffect(() => {
+//   localStorage.setItem(
+//     "sentinelx-history",
+//     JSON.stringify(history)
+//   );
+// }, [history]);
+
+    useEffect(() => {
+      const fetchHistory = async () => {
+        try {
+          const userId =
+            localStorage.getItem("userId");
+
+          if (!userId) return;
+
+          const response = await fetch(
+            `http://localhost:5000/api/scans/${userId}`
+          );
+
+          const data = await response.json();
+
+          const formattedHistory =
+          data.map((scan) => ({
+            text: scan.text,
+            risk: scan.riskLevel,
+            result: scan.result,
+            date: new Date(
+              scan.createdAt
+            ).toLocaleString(),
+          }));
+
+          setTotalScans(data.length);
+
+          setHighThreats(
+            data.filter(
+              (scan) =>
+                scan.riskLevel
+                  .toLowerCase()
+                  .includes("high")
+            ).length
+          );
+
+          setMediumThreats(
+            data.filter(
+              (scan) =>
+                scan.riskLevel
+                  .toLowerCase()
+                  .includes("medium")
+            ).length
+          );
+
+          setSafeScans(
+            data.filter(
+              (scan) =>
+                scan.riskLevel
+                  .toLowerCase()
+                  .includes("low")
+            ).length
+          );
+
+          setHistory(
+            formattedHistory.reverse()
+          );
+        } catch (error) {
+          console.log(
+            "History Load Error:",
+            error
+          );
+        }
+      };
+
+      fetchHistory();
+    }, []);
+
   const downloadReport = () => {
   const doc = new jsPDF();
   doc.setFontSize(18);
@@ -52,14 +138,19 @@ const handleLogout = () => {
   navigate("/login");
 };
 
-
   return (
     <div className="min-h-screen bg-black text-white">
       
       <nav className="flex justify-between items-center px-10 py-6 border-b border-gray-800">
-        <h1 className="text-3xl font-bold text-cyan-400">
-          SentinelX
-        </h1>
+        <div>
+          <h1 className="text-3xl font-bold text-cyan-400">
+            SentinelX
+          </h1>
+
+          <p className="text-gray-400 text-sm">
+            Welcome, {userName}
+          </p>
+        </div>
 
         <div className="flex items-center space-x-6 text-gray-300">
           <a href="#" className="hover:text-cyan-400">
@@ -171,9 +262,10 @@ const handleLogout = () => {
         {safeScans}
       </p>
     </div>
+      <br/>
   </div>
 </div>
-
+<br />
 <div className="px-10 pb-24">
   <div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-4xl mx-auto">
     <h2 className="text-4xl font-bold text-cyan-400 text-center mb-6">
@@ -229,15 +321,41 @@ const handleLogout = () => {
         }),
       }
     );
-  setHistory((prev) => [
+    setHistory((prev) => [
   {
     text: threatText,
     risk: data.riskLevel,
     result: data.result,
+    date: new Date().toLocaleString(),
   },
   ...prev,
 ]);
   setTotalScans((prev) => prev + 1);
+  if (
+      data.riskLevel
+        .toLowerCase()
+        .includes("high")
+    ) {
+      setHighThreats(
+        (prev) => prev + 1
+      );
+    }
+
+    else if (
+      data.riskLevel
+        .toLowerCase()
+        .includes("medium")
+    ) {
+      setMediumThreats(
+        (prev) => prev + 1
+      );
+    }
+
+    else {
+      setSafeScans(
+        (prev) => prev + 1
+      );
+    }
 
   if (data.riskLevel === "High") {
     setHighThreats((prev) => prev + 1);
@@ -333,6 +451,101 @@ const handleLogout = () => {
   </div>
 </div>
 
+<div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-5xl mx-auto mt-10">
+  <h2 className="text-3xl font-bold text-cyan-400 text-center mb-8">
+    Threat Analytics
+  </h2>
+
+  <div className="space-y-6">
+
+    <div>
+      <div className="flex justify-between mb-2">
+        <span>High Threats</span>
+        <span>{highThreats}</span>
+      </div>
+
+      <div className="w-full bg-gray-700 rounded-full h-4">
+        <div
+          className="bg-red-500 h-4 rounded-full"
+          style={{
+            width: `${totalScans ? (highThreats / totalScans) * 100 : 0}%`,
+          }}
+        ></div>
+      </div>
+    </div>
+
+    <div>
+      <div className="flex justify-between mb-2">
+        <span>Medium Threats</span>
+        <span>{mediumThreats}</span>
+      </div>
+
+      <div className="w-full bg-gray-700 rounded-full h-4">
+        <div
+          className="bg-yellow-500 h-4 rounded-full"
+          style={{
+            width: `${totalScans ? (mediumThreats / totalScans) * 100 : 0}%`,
+          }}
+        ></div>
+      </div>
+    </div>
+
+    <div>
+      <div className="flex justify-between mb-2">
+        <span>Safe Scans</span>
+        <span>{safeScans}</span>
+      </div>
+
+      <div className="w-full bg-gray-700 rounded-full h-4">
+        <div
+          className="bg-green-500 h-4 rounded-full"
+          style={{
+            width: `${totalScans ? (safeScans / totalScans) * 100 : 0}%`,
+          }}
+        ></div>
+      </div>
+    </div>
+    
+    <div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-4xl mx-auto mt-10">
+      <h2 className="text-3xl font-bold text-cyan-400 text-center mb-6">
+        Threat Analytics Chart
+      </h2>
+
+    <div className="flex justify-center">
+          <PieChart width={400} height={300}>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              outerRadius={100}
+              dataKey="value"
+              label
+            >
+              {chartData.map(
+                (entry, index) => (
+                  <Cell
+                    key={index}
+                    fill={
+                      COLORS[
+                        index %
+                          COLORS.length
+                      ]
+                    }
+                  />
+                )
+              )}
+            </Pie>
+
+            <Tooltip />
+            <Legend />
+          </PieChart>
+      </div>
+    </div>
+  </div>
+</div>
+
+<br />
+<br /><br />
 <div className="px-10 pb-24">
   <div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-6xl mx-auto">
     <h2 className="text-4xl font-bold text-cyan-400 text-center mb-6">
@@ -347,6 +560,7 @@ const handleLogout = () => {
             <th className="p-3">Content</th>
             <th className="p-3">Risk</th>
             <th className="p-3">Result</th>
+            <th className="p-3">Date & Time</th>
           </tr>
         </thead>
         <tbody>
@@ -366,6 +580,10 @@ const handleLogout = () => {
 
               <td className="p-3">
                 {item.result}
+              </td>
+
+              <td className="p-3">
+                {item.date}
               </td>
             </tr>
           ))}

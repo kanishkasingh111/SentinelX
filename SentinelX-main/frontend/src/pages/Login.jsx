@@ -53,6 +53,10 @@ function Login() {
                   "userId",
                   data.userId
                 );
+                localStorage.setItem(
+                  "name",
+                  data.name
+                );
 
                 navigate("/dashboard");
               } else {
