@@ -43,6 +43,7 @@ function Login() {
               );
 
               const data = await response.json();
+              console.log(data);
 
               if (data.token) {
                 localStorage.setItem(
@@ -56,6 +57,10 @@ function Login() {
                 localStorage.setItem(
                   "name",
                   data.name
+                );
+                localStorage.setItem(
+                  "email",
+                  data.email
                 );
 
                 navigate("/dashboard");
