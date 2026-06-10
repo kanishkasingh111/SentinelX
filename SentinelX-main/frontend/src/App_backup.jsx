@@ -7,6 +7,7 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import {PieChart,Pie,Cell,Tooltip,Legend,} from "recharts";
+import {LineChart,Line,XAxis,YAxis,CartesianGrid} from "recharts";
 
 function App() {
   const navigate = useNavigate();
@@ -27,12 +28,22 @@ function App() {
   const [mediumThreats, setMediumThreats] = useState(0);
   const [safeScans, setSafeScans] = useState(0);
   const [history, setHistory] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [filterRisk, setFilterRisk] = useState("All");
+  const [dateFilter, setDateFilter] =useState("all");
   const userName =localStorage.getItem("name");
-  const chartData = [
-  {
-    name: "High Threats",
-    value: highThreats,
-  },
+  const [sortBy, setSortBy] =useState("newest");
+  const [topKeywords,setTopKeywords] =useState([]);
+  const [trendData, setTrendData] =useState([]);
+  const [securityScore, setSecurityScore] =useState(100);
+  const [alertMessage,setAlertMessage] =useState("");
+  const [showLogoutModal, setShowLogoutModal] =useState(false);
+  const [theme, setTheme] =useState(
+    localStorage.getItem("theme") ||
+    "dark"
+  );
+  const chartData = [{name: "High Threats",value: highThreats,},
   {
     name: "Medium Threats",
     value: mediumThreats,
@@ -47,13 +58,13 @@ const COLORS = [
   "#facc15",
   "#22c55e",
 ];
-  
-//   useEffect(() => {
-//   localStorage.setItem(
-//     "sentinelx-history",
-//     JSON.stringify(history)
-//   );
-// }, [history]);
+
+useEffect(() => {
+  localStorage.setItem(
+    "theme",
+    theme
+  );
+}, [theme]);
 
     useEffect(() => {
       const fetchHistory = async () => {
@@ -70,13 +81,14 @@ const COLORS = [
           const data = await response.json();
 
           const formattedHistory =
-          data.map((scan) => ({
-            text: scan.text,
-            risk: scan.riskLevel,
-            result: scan.result,
-            date: new Date(
-              scan.createdAt
-            ).toLocaleString(),
+            data.map((scan) => ({
+              id: scan._id,
+              text: scan.text,
+              risk: scan.riskLevel,
+              result: scan.result,
+              date: new Date(
+                scan.createdAt
+              ).toLocaleString(),
           }));
 
           setTotalScans(data.length);
@@ -111,6 +123,91 @@ const COLORS = [
           setHistory(
             formattedHistory.reverse()
           );
+
+          const keywordCount = {};
+
+          data.forEach((scan) => {
+            if (scan.keywords) {
+              scan.keywords.forEach(
+                (keyword) => {
+                  keywordCount[keyword] =
+                    (keywordCount[keyword] || 0) + 1;
+                }
+              );
+            }
+          });
+
+const sortedKeywords =
+  Object.entries(keywordCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+setTopKeywords(sortedKeywords);
+const dailyScans = {};
+
+data.forEach((scan) => {
+  const day =
+    new Date(scan.createdAt)
+      .toLocaleDateString("en-US", {
+        weekday: "short",
+      });
+
+  dailyScans[day] =
+    (dailyScans[day] || 0) + 1;
+});
+
+const trend = Object.keys(
+  dailyScans
+).map((day) => ({
+  day,
+  scans: dailyScans[day],
+}));
+
+setTrendData(trend);
+
+const highCount = data.filter(
+  (scan) => scan.riskLevel === "High"
+).length;
+
+const mediumCount = data.filter(
+  (scan) => scan.riskLevel === "Medium"
+).length;
+
+let score = 100;
+
+score -= highCount * 5;
+score -= mediumCount * 2;
+
+if (score < 0) {
+  score = 0;
+}
+
+setSecurityScore(score);
+
+if (data.length > 0) {
+  const latestScan =
+    data[data.length - 1];
+
+  if (
+    latestScan.riskLevel ===
+    "High"
+  ) {
+    setAlertMessage(
+      "⚠️ ALERT: High Risk Threat Detected"
+    );
+  } else if (
+    latestScan.riskLevel ===
+    "Medium"
+  ) {
+    setAlertMessage(
+      "⚠️ Warning: Suspicious Content Detected"
+    );
+  } else {
+    setAlertMessage(
+      "✅ No Recent Threats Detected"
+    );
+  }
+}
         } catch (error) {
           console.log(
             "History Load Error:",
@@ -133,19 +230,210 @@ const COLORS = [
   doc.save("SentinelX_Report.pdf");
 };
 
+const deleteScan = async (id) => {
+  console.log("Deleting ID:", id);
+
+  try {
+    await fetch(
+      `http://localhost:5000/api/scans/${id}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    setHistory((prev) =>
+      prev.filter((item) => item.id !== id)
+    );
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const clearAllHistory = async () => {
+  const confirmed = window.confirm(
+    "Are you sure you want to delete all scans?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const userId =
+      localStorage.getItem("userId");
+
+    await fetch(
+      `http://localhost:5000/api/scans/clear/${userId}`,
+      {
+        method: "DELETE",
+      }
+    );
+
+    setHistory([]);
+
+    setTotalScans(0);
+    setHighThreats(0);
+    setMediumThreats(0);
+    setSafeScans(0);
+
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const exportCSV = () => {
+  const headers =
+    "Content,Risk,Result,Date\n";
+
+  const rows = history
+    .map(
+      (item) =>
+        `"${item.text}","${item.risk}","${item.result}","${item.date}"`
+    )
+    .join("\n");
+
+  const csvContent =
+    headers + rows;
+
+  const blob = new Blob(
+    [csvContent],
+    {
+      type: "text/csv",
+    }
+  );
+
+  const url =
+    window.URL.createObjectURL(blob);
+
+  const link =
+    document.createElement("a");
+
+  link.href = url;
+  link.download =
+    "sentinelx_history.csv";
+
+  link.click();
+};
+
+const filteredHistory = history.filter(
+  (item) => {
+    const matchesSearch =
+      item.text
+        .toLowerCase()
+        .includes(
+          searchTerm.toLowerCase()
+        );
+
+    const matchesRisk =
+      filterRisk === "All" ||
+      item.risk
+        .toLowerCase()
+        .includes(
+          filterRisk.toLowerCase()
+        );
+
+    let matchesDate = true;
+
+    const scanDate =
+      new Date(item.date);
+
+    const today = new Date();
+
+    if (dateFilter === "today") {
+      matchesDate =
+        scanDate.toDateString() ===
+        today.toDateString();
+    }
+
+    if (dateFilter === "7days") {
+      const sevenDaysAgo =
+        new Date();
+
+      sevenDaysAgo.setDate(
+        today.getDate() - 7
+      );
+
+      matchesDate =
+        scanDate >= sevenDaysAgo;
+    }
+
+    if (dateFilter === "30days") {
+      const thirtyDaysAgo =
+        new Date();
+
+      thirtyDaysAgo.setDate(
+        today.getDate() - 30
+      );
+
+      matchesDate =
+        scanDate >= thirtyDaysAgo;
+    }
+
+    return (
+      matchesSearch &&
+      matchesRisk &&
+      matchesDate
+    );
+  }
+);
+
+const sortedHistory =
+  [...filteredHistory].sort(
+    (a, b) => {
+      if (sortBy === "newest") {
+        return (
+          new Date(b.date) -
+          new Date(a.date)
+        );
+      }
+
+      return (
+        new Date(a.date) -
+        new Date(b.date)
+      );
+    }
+  );
+
 const handleLogout = () => {
   localStorage.removeItem("token");
   navigate("/login");
 };
 
+const logout = () => {
+  localStorage.clear();
+  navigate("/login");
+};
+
+const recentActivity =[...history].slice(0, 5);
+const highThreatPercentage =
+  totalScans > 0
+    ? ((highThreats / totalScans) * 100).toFixed(1)
+    : 0;
+
+const mediumThreatPercentage =
+  totalScans > 0
+    ? ((mediumThreats / totalScans) * 100).toFixed(1)
+    : 0;
+
+const safePercentage =
+  totalScans > 0
+    ? ((safeScans / totalScans) * 100).toFixed(1)
+    : 0;
+
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className={
+    theme === "dark"
+      ? "min-h-screen bg-black text-white"
+      : "min-h-screen bg-white text-black"
+  }
+>
       
       <nav className="flex justify-between items-center px-10 py-6 border-b border-gray-800">
         <div>
           <h1 className="text-3xl font-bold text-cyan-400">
             SentinelX
           </h1>
+          <div className="bg-yellow-500 text-black font-bold text-center py-3 rounded-xl mb-8">
+            {alertMessage}
+          </div>
 
           <p className="text-gray-400 text-sm">
             Welcome, {userName}
@@ -161,15 +449,41 @@ const handleLogout = () => {
             Features
           </a>
 
+        
+
           <a href="#" className="hover:text-cyan-400">
             Dashboard
           </a>
 
           <button
-            onClick={handleLogout}
+            onClick={() =>
+              navigate("/profile")
+            }
+            className="bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-xl mr-3"
+          >
+            Profile
+          </button>
+
+          <button
+            onClick={() =>setShowLogoutModal(true)}
             className="bg-red-500 hover:bg-red-400 text-white px-4 py-2 rounded-lg"
           >
             Logout
+          </button>
+
+          <button
+            onClick={() =>
+              setTheme(
+                theme === "dark"
+                  ? "light"
+                  : "dark"
+              )
+            }
+            className="px-4 py-2 rounded-lg bg-cyan-500 text-black font-bold"
+          >
+            {theme === "dark"
+              ? "☀️ Light Mode"
+              : "🌙 Dark Mode"}
           </button>
         </div>
 
@@ -241,33 +555,57 @@ const handleLogout = () => {
       <h3 className="text-red-400 text-xl font-bold">
         High Risk
       </h3>
-      <p className="text-3xl mt-3">
-        {highThreats}
-      </p>
+      <div>
+        <p className="text-4xl font-bold">
+          {highThreats}
+        </p>
+
+        <p className="text-sm text-gray-400">
+          {highThreatPercentage}% of all scans
+        </p>
+    </div>
     </div>
     <div className="bg-gray-900 border border-yellow-500 rounded-xl p-6 text-center">
       <h3 className="text-yellow-400 text-xl font-bold">
         Medium Risk
       </h3>
-      <p className="text-3xl mt-3">
-        {mediumThreats}
-      </p>
+      <div>
+        <p className="text-4xl font-bold">
+          {mediumThreats}
+        </p>
+
+        <p className="text-sm text-gray-400">
+          {mediumThreatPercentage}% of all scans
+        </p>
+      </div>
     </div>
     <div className="bg-gray-900 border border-green-500 rounded-xl p-6 text-center">
       <h3 className="text-green-400 text-xl font-bold">
         Safe
       </h3>
 
-      <p className="text-3xl mt-3">
-        {safeScans}
-      </p>
+      <div>
+        <p className="text-4xl font-bold">
+          {safeScans}
+        </p>
+
+        <p className="text-sm text-gray-400">
+          {safePercentage}% of all scans
+        </p>
+      </div>
     </div>
       <br/>
   </div>
 </div>
 <br />
 <div className="px-10 pb-24">
-  <div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-4xl mx-auto">
+  <div
+  className={`${
+    theme === "dark"
+      ? "bg-gray-900"
+      : "bg-gray-100"
+  } border border-cyan-500 rounded-3xl p-8`}
+>
     <h2 className="text-4xl font-bold text-cyan-400 text-center mb-6">
       Threat Analyzer
     </h2>
@@ -544,13 +882,237 @@ const handleLogout = () => {
   </div>
 </div>
 
-<br />
+<br/>
+<br/><br/>
+
+<div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-4xl mx-auto mt-10">
+  <h2 className="text-3xl font-bold text-cyan-400 text-center mb-6">
+    Top Threat Keywords
+  </h2>
+  {topKeywords.map(
+    ([keyword, count]) => (
+      <div
+        key={keyword}
+        className="flex justify-between border-b border-gray-700 py-2"
+      >
+        <span>{keyword}</span>
+        <span>{count}</span>
+      </div>
+    )
+  )}
+</div>
+
 <br /><br />
+
+<div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-4xl mx-auto mt-10 text-center">
+  <h2 className="text-3xl font-bold text-cyan-400 mb-4">
+    Security Score
+  </h2>
+
+  <p className="text-6xl font-bold text-white">
+    {securityScore}/100
+  </p>
+
+  <p className="mt-4 text-xl">
+    {securityScore >= 80
+      ? "Excellent Security Posture"
+      : securityScore >= 60
+      ? "Moderate Risk Detected"
+      : "High Risk Activity Detected"}
+  </p>
+</div>
+
+<div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-4xl mx-auto mt-10">
+  <h2 className="text-3xl font-bold text-cyan-400 text-center mb-6">
+    Recent Activity
+  </h2>
+
+  {recentActivity.map(
+    (item, index) => (
+      <div
+        key={index}
+        className="border-b border-gray-700 py-3"
+      >
+        <p>
+          <span className="font-bold">
+            {item.risk}
+          </span>{" "}
+          - {item.result}
+        </p>
+        <p className="text-gray-400 text-sm">
+          {item.date}
+        </p>
+      </div>
+    )
+  )}
+</div>
+
+<br/><br/>
+
+<div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-5xl mx-auto mt-10">
+  <h2 className="text-3xl font-bold text-cyan-400 text-center mb-6">
+    Threat Trend (Last 7 Days)
+  </h2>
+
+  <div className="flex justify-center">
+    <LineChart
+      width={700}
+      height={300}
+      data={trendData}
+    >
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="day" />
+      <YAxis />
+      <Tooltip />
+      <Line
+        type="monotone"
+        dataKey="scans"
+        stroke="#06b6d4"
+        strokeWidth={3}
+      />
+    </LineChart>
+  </div>
+</div>
+
+<br/><br/>
+
 <div className="px-10 pb-24">
   <div className="bg-gray-900 border border-cyan-500 rounded-3xl p-8 max-w-6xl mx-auto">
     <h2 className="text-4xl font-bold text-cyan-400 text-center mb-6">
       Analysis History
     </h2>
+
+<div className="flex gap-4 justify-center mb-6">
+  <button
+    onClick={() => setFilterRisk("All")}
+    className="bg-cyan-500 hover:bg-cyan-600 px-4 py-2 rounded-lg"
+  >
+    All
+  </button>
+
+  <button
+    onClick={() => setFilterRisk("High")}
+    className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg"
+  >
+    High
+  </button>
+
+  <button
+    onClick={() => setFilterRisk("Medium")}
+    className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg"
+  >
+    Medium
+  </button>
+
+  <button
+    onClick={() => setFilterRisk("Low")}
+    className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg"
+  >
+    Low
+  </button>
+</div>
+
+<div className="flex gap-4 justify-center mb-6">
+  <button
+    onClick={() =>
+      setDateFilter("all")
+    }
+    className="bg-cyan-500 px-4 py-2 rounded-lg"
+  >
+    All Time
+  </button>
+
+  <button
+    onClick={() =>
+      setDateFilter("today")
+    }
+    className="bg-purple-500 px-4 py-2 rounded-lg"
+  >
+    Today
+  </button>
+
+  <button
+    onClick={() =>
+      setDateFilter("7days")
+    }
+    className="bg-blue-500 px-4 py-2 rounded-lg"
+  >
+    Last 7 Days
+  </button>
+
+  <button
+    onClick={() =>
+      setDateFilter("30days")
+    }
+    className="bg-green-500 px-4 py-2 rounded-lg"
+  >
+    Last 30 Days
+  </button>
+</div>
+
+<div className="flex gap-4 justify-center mb-6">
+  <button
+    onClick={() =>
+      setSortBy("newest")
+    }
+    className="bg-indigo-500 px-4 py-2 rounded-lg"
+  >
+    Newest First
+  </button>
+
+  <button
+    onClick={() =>
+      setSortBy("oldest")
+    }
+    className="bg-indigo-700 px-4 py-2 rounded-lg"
+  >
+    Oldest First
+  </button>
+</div>
+
+    <button
+      onClick={exportCSV}
+      className="bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-xl font-semibold"
+    >
+      Export CSV
+    </button>
+
+    <span>        </span>
+
+    <button
+      onClick={clearAllHistory}
+      className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-xl font-semibold"
+    >
+      Clear All
+    </button>
+      
+    <div className="flex flex-col md:flex-row gap-4 mb-6">
+
+  <input
+    type="text"
+    placeholder="Search content..."
+    value={searchTerm}
+    onChange={(e) =>
+      setSearchTerm(e.target.value)
+    }
+    className="flex-1 p-3 rounded-xl bg-black border border-gray-700 text-white"
+  />
+
+  <select
+    value={filterRisk}
+    onChange={(e) =>
+      setFilterRisk(e.target.value)
+    }
+    className="p-3 rounded-xl bg-black border border-gray-700 text-white"
+  >
+    <option value="All">All Risks</option>
+    <option value="High">High</option>
+    <option value="Medium">Medium</option>
+    <option value="Low">Low</option>
+  </select>
+
+</div>
+
     <div className="overflow-x-auto">
 
       <table className="w-full text-left border-collapse">
@@ -561,11 +1123,13 @@ const handleLogout = () => {
             <th className="p-3">Risk</th>
             <th className="p-3">Result</th>
             <th className="p-3">Date & Time</th>
+            <th className="p-3">Action</th>
+
           </tr>
         </thead>
         <tbody>
 
-          {history.map((item, index) => (
+          {sortedHistory.map((item, index) => (
             <tr
               key={index}
               className="border-b border-gray-700"
@@ -584,6 +1148,21 @@ const handleLogout = () => {
 
               <td className="p-3">
                 {item.date}
+              </td>
+
+              <td className="p-3">
+                {item.id}
+              </td>
+
+              <td className="p-3">
+                <button
+                  onClick={() =>
+                    deleteScan(item.id)
+                  }
+                  className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg"
+                >
+                  Delete
+                </button>
               </td>
             </tr>
           ))}
@@ -791,6 +1370,40 @@ const handleLogout = () => {
     )}
   </div>
 </div>
+
+{showLogoutModal && (
+  <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-gray-900 p-8 rounded-3xl text-center">
+      <h2 className="text-2xl font-bold text-cyan-400 mb-4">
+        Confirm Logout
+      </h2>
+
+      <p className="mb-4">
+        Are you sure you want to logout?
+      </p>
+
+      <button
+        onClick={() =>
+          setShowLogoutModal(false)
+        }
+        className="bg-gray-600 px-4 py-2 rounded mr-3"
+      >
+        Cancel
+      </button>
+
+      <button
+        onClick={() => {
+          localStorage.clear();
+          window.location.href = "/login";
+        }}
+        className="bg-red-500 px-4 py-2 rounded"
+      >
+        Logout
+      </button>
+    </div>
+  </div>
+)}
+
   </div>
   );
 }
