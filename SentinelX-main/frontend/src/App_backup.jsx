@@ -501,8 +501,8 @@ const safePercentage =
         </p>
 
         <button className="mt-10 bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-8 py-4 rounded-xl transition duration-300">
-  Analyze Threat
-</button>
+          SentinelX  
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 px-10 mt-24 pb-20">
